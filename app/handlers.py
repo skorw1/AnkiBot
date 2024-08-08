@@ -22,7 +22,9 @@ router = Router()
 
 
 
-
+"""
+Функция создает и отправляет пользователю CSV файл
+"""
 async def create_and_send_csv(user_id: int, chat_id: int, bot) -> None:
     path_to_csv = f"{user_id}.csv"
     try:
@@ -42,28 +44,45 @@ async def create_and_send_csv(user_id: int, chat_id: int, bot) -> None:
         if os.path.exists(path_to_csv):
             os.remove(path_to_csv)
 
+"""
+Обработчик сообщений /start, /help
+"""
 @router.message(Command('start'))
 @router.message(Command('help'))
 @anti_spam_decorator
 async def handle_start(message: types.Message) -> None:
     await message.answer(INTRO_MESSAGE, reply_markup=kb.start_menu)
 
+"""
+Обработчик команды /csv
+"""
 @router.message(Command('csv'))
 @anti_spam_decorator
 async def handle_csv_command(message: types.Message) -> None:
-    await create_and_send_csv(message.from_user.id, message.chat.id, message.bot)
+    if not TRANSLATIONS_LIST:
+        await message.answer('CSV Файл пустой. Пожалуйста, добавьте слова/фразы сначало.')
+    else:
+        await create_and_send_csv(message.from_user.id, message.chat.id, message.bot)
 
+"""
+Обработчик команды /multiple_translation и сообщения Множественный перевод
+"""
 @router.message(Command('multiple_translation'), F.text.lower() == 'множественный перевод')
 @anti_spam_decorator
 async def handle_multiple_translation(message: types.Message) -> None:
     await message.answer(MULTIPLE_TRANSLATION_MESSAGE, reply_markup=kb.multiple_translation_menu)
 
+"""
+Обработчик сообщения главное меню
+"""
 @router.message(F.text.lower() == 'главное меню')
 @anti_spam_decorator
 async def main_menu(message: types.Message) -> None:
     await message.answer("Вы вернулись в главное меню", reply_markup=kb.start_menu)
 
-
+"""
+Главный обработчик сообщений. Переводит по слову или целую фразу.
+"""
 @router.message()
 @anti_spam_decorator
 async def handle_message(message: types.Message) -> None:
