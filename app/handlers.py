@@ -3,14 +3,14 @@ import os
 import logging
 
 from functools import wraps
-from magic_filter import F
+from aiogram import F
 from aiogram import Bot, Dispatcher, types, Router
 from aiogram.filters import Command, Filter
 from aiogram.types import FSInputFile
 import app.keyboards as kb
-from utils import check_word, download_audio, google_translate, microsoft_translate, anti_spam_decorator
+from utils import *
 from .messages import INTRO_MESSAGE, MULTIPLE_TRANSLATION_MESSAGE
-
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 
 TRANSLATIONS_LIST = []
@@ -20,6 +20,21 @@ logging.basicConfig(level=logging.INFO)
 
 router = Router()
 
+"""
+Обработчик отвечающий за множественный перевод
+"""
+@router.message(F.text.startswith('megatranslate'))
+@anti_spam_decorator
+async def multiple_translation(message: types.Message) -> None:
+    separator = ','
+
+    sentences = message.text[14:].split(separator)
+    result = await handle_multiple_requests(sentences)
+
+    for i in result:
+        if i:
+            await message.answer(f"Перевод: {i[0]} --- > {i[1]}")
+            TRANSLATIONS_LIST.append(i)
 
 
 """
@@ -67,10 +82,12 @@ async def handle_csv_command(message: types.Message) -> None:
 """
 Обработчик команды /multiple_translation и сообщения Множественный перевод
 """
-@router.message(Command('multiple_translation'), F.text.lower() == 'множественный перевод')
+@router.message(Command('multiple_translation'))
+@router.message(F.text.lower() == 'множественный перевод')
 @anti_spam_decorator
 async def handle_multiple_translation(message: types.Message) -> None:
     await message.answer(MULTIPLE_TRANSLATION_MESSAGE, reply_markup=kb.multiple_translation_menu)
+
 
 """
 Обработчик сообщения главное меню
@@ -105,5 +122,5 @@ async def handle_message(message: types.Message) -> None:
             await message.answer(f'Ошибка: {str(e)}')
     else:
         translation = microsoft_translate(word)
-        await message.answer(f'Translation: {translation}', reply_markup=kb.main)
+        await message.answer(f'Translation: {translation}', reply_markup=kb.main_menu)
         TRANSLATIONS_LIST.append((word, translation))
