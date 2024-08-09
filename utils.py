@@ -10,6 +10,8 @@ from selenium.webdriver.common.by import By
 import logging
 import time
 from config import API_KEY
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+import aiohttp
 
 logging.basicConfig(level=logging.INFO)
 
@@ -64,26 +66,7 @@ def google_translate(sentence: str) -> str:
 
 
 
-def check_word(word: str) -> str:
-    """
-    Извлекает перевод одного слова из словаря Cambridge Dictionary.
-    """
 
-    if len(word) <= 1:
-        raise ValueError("Слово должно содержать хотя бы 2 буквы.")
-    
-    if not is_english_alphabet_only(word):
-        raise ValueError("Слово должно состоять только из английских букв.")
-
-    url = f'https://dictionary.cambridge.org/dictionary/english-russian/{word}'
-    response = requests.get(url, headers=HEADERS)
-    soup = BeautifulSoup(response.text, 'lxml')
-    word_element = soup.find('span', class_='trans dtrans dtrans-se')
-
-    if word_element:
-        return word_element.get_text()
-    else:
-        raise LookupError("Перевод не найден")
 
 
 
@@ -119,6 +102,29 @@ def download_audio(word: str) -> None:
 Переводит предложение через бесплатный Microsoft Translate Api.
 """
 
+
+def check_word(word: str) -> str:
+    """
+    Извлекает перевод одного слова из словаря Cambridge Dictionary.
+    """
+
+    if len(word) <= 1:
+        raise ValueError("Слово должно содержать хотя бы 2 буквы.")
+    
+    if not is_english_alphabet_only(word):
+        raise ValueError("Слово должно состоять только из английских букв.")
+
+    url = f'https://dictionary.cambridge.org/dictionary/english-russian/{word}'
+    response = requests.get(url, headers=HEADERS)
+    soup = BeautifulSoup(response.text, 'lxml')
+    word_element = soup.find('span', class_='trans dtrans dtrans-se')
+
+    if word_element:
+        return word_element.get_text()
+    else:
+        raise LookupError("Перевод не найден")
+    
+    
 def microsoft_translate(sentence: str) -> str:
     url = "https://microsoft-translator-text.p.rapidapi.com/translate"
 
@@ -140,3 +146,58 @@ def microsoft_translate(sentence: str) -> str:
 
     response = requests.post(url, json=payload, headers=headers, params=querystring)
     return response.json()[0]['translations'][0]['text']
+
+
+async def async_microsoft_translate(session: aiohttp.ClientSession, sentence: str) -> str:
+    url = "https://microsoft-translator-text.p.rapidapi.com/translate"
+    querystring = {
+        "api-version": "3.0",
+        "profanityAction": "NoAction",
+        "textType": "plain",
+        "to": "ru"
+    }
+    payload = [{
+        "Text": sentence,
+    }]
+    headers = {
+        "x-rapidapi-key": API_KEY,
+        "x-rapidapi-host": "microsoft-translator-text.p.rapidapi.com",
+        "Content-Type": "application/json"
+    }
+    async with session.post(url, json=payload, headers=headers, params=querystring) as response:
+        response_json = await response.json()
+        translated_sentence = response_json[0]['translations'][0]['text']
+        return (sentence, translated_sentence)
+
+
+async def async_check_word(session: aiohttp.ClientSession, word: str) -> str:
+    if len(word) <= 1:
+        raise ValueError("Слово должно содержать хотя бы 2 буквы.")
+    if not is_english_alphabet_only(word):
+        raise ValueError("Слово должно состоять только из английских букв.")
+    
+    url = f'https://dictionary.cambridge.org/dictionary/english-russian/{word}'
+    async with session.get(url, headers=HEADERS) as response:
+        text = await response.text()
+        soup = BeautifulSoup(text, 'lxml')
+        word_element = soup.find('span', class_='trans dtrans dtrans-se')
+        
+        if word_element:
+            return (word, word_element.get_text())
+        else:
+            print('Перевод не найден.')
+            return
+
+async def handle_multiple_requests(sentences: list[str]) -> list[str]:
+    async with aiohttp.ClientSession() as session:
+        tasks = []
+        for sentence in sentences:
+            if len(sentence.split()) == 1:  # если это одно слово
+                task = async_check_word(session, sentence)
+            else:  # если это предложение
+                task = async_microsoft_translate(session, sentence)
+            tasks.append(task)
+        
+        results = await asyncio.gather(*tasks)
+        print(results)
+        return results
