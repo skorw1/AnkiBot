@@ -94,7 +94,6 @@ async def choosing_topic(message: types.Message, state: FSMContext):
         await message.answer('Вы успешно вернулись назад', reply_markup=kb.topic_menu)
     else:
         topic_id = await if_topic_exist(message.from_user.id, title)
-        print(topic_id[0])
         if not topic_id[0] is None:
             topics = await get_words_by_topic(topic_id=topic_id[0])
             message_to_send = ''
