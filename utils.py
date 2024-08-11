@@ -65,11 +65,6 @@ def google_translate(sentence: str) -> str:
         driver.quit()
 
 
-
-
-
-
-
 def download_audio(word: str) -> None:
     """
     Скачивает аудиофайл произношения слова из Cambridge Dictionary.
@@ -174,6 +169,7 @@ async def async_check_word(session: aiohttp.ClientSession, word: str) -> str:
     if len(word) <= 1:
         raise ValueError("Слово должно содержать хотя бы 2 буквы.")
     if not is_english_alphabet_only(word):
+        print(word)
         raise ValueError("Слово должно состоять только из английских букв.")
     
     url = f'https://dictionary.cambridge.org/dictionary/english-russian/{word}'
@@ -187,6 +183,19 @@ async def async_check_word(session: aiohttp.ClientSession, word: str) -> str:
         else:
             print('Перевод не найден.')
             return
+
+async def handle_text(session: aiohttp.ClientSession, text: str):
+    if ' ' in text:
+        # Предполагаем, что это предложение
+        translated_sentence = await async_microsoft_translate(session, text)
+        return translated_sentence
+    else:
+        # Это одно слово, проверяем его
+        try:
+            result = await async_check_word(session, text)
+            return result
+        except ValueError as e:
+            return str(e)
 
 async def handle_multiple_requests(sentences: list[str]) -> list[str]:
     async with aiohttp.ClientSession() as session:
