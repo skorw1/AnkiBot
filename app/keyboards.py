@@ -17,3 +17,34 @@ multiple_translation_menu = ReplyKeyboardMarkup(keyboard=[
 ])
 
 
+topic_menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Добавить тему'), KeyboardButton(text='Удалить тему')],
+    [KeyboardButton(text='Мои темы'), KeyboardButton(text='Добавить слова в тему')],
+    [KeyboardButton(text='Главное меню'), KeyboardButton(text='Добавленные слова')]
+],  resize_keyboard=True,
+    input_field_placeholder='Воспользуйтесь меню ниже')
+
+topic_adding_menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Отменить создание темы')]
+
+],  resize_keyboard=True,
+    input_field_placeholder='Воспользуйтесь меню ниже')
+
+
+topic_deleting_menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Отменить создание темы')]
+
+],  resize_keyboard=True,
+    input_field_placeholder='Воспользуйтесь меню ниже')
+
+word_adding_menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Отменить добавление темы')]
+
+],  resize_keyboard=True,
+    input_field_placeholder='Воспользуйтесь меню ниже')
+
+word_adding_to_topic_menu = ReplyKeyboardMarkup(keyboard=[
+    [KeyboardButton(text='Прекратить добавление слов')]
+
+],  resize_keyboard=True,
+    input_field_placeholder='Воспользуйтесь меню ниже')
