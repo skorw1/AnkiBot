@@ -7,8 +7,12 @@ from aiogram import F
 from aiogram import Bot, Dispatcher, types, Router
 from aiogram.filters import Command, Filter
 from aiogram.types import FSInputFile
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.fsm.context import FSMContext
+
 import app.keyboards as kb
 from utils import *
+from app.database import *
 from .messages import INTRO_MESSAGE, MULTIPLE_TRANSLATION_MESSAGE
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
@@ -19,6 +23,178 @@ TRANSLATIONS_LIST = []
 logging.basicConfig(level=logging.INFO)
 
 router = Router()
+
+class TopicState(StatesGroup):
+    title = State()
+    deleting_title = State()
+    adding_topic = State()
+    adding_word = State()
+    title_list = State()
+
+
+@router.message(F.text.lower().strip() == 'добавить тему')
+async def add_topic(message: types.Message, state: FSMContext):
+    await state.set_state(TopicState.title)
+    await message.answer('Введите название для темы:', reply_markup=kb.topic_adding_menu)
+
+@router.message(F.text.lower() == 'отменить создание темы')
+async def cancel_topic_creation(message: types.Message, state: FSMContext):
+    await state.clear()
+    await message.answer('Вы отменили создание темы', reply_markup=kb.topic_menu)
+
+@router.message(TopicState.title)
+async def adding_topic_to_db(message: types.Message, state: FSMContext):
+
+    await state.update_data(title=message.text)
+    data = await state.get_data()
+    title = data.get('title', 'ошибка')
+    await add_topics(message.from_user.id, title)
+    await message.answer(f'Вы создали тему {title}', reply_markup=kb.topic_menu)
+    await state.clear()
+
+
+@router.message(F.text.lower().strip() == 'удалить тему')
+async def delete_topic(message: types.Message, state: FSMContext):
+    await state.set_state(TopicState.deleting_title)
+    await message.answer('Введите название темы, которую хотите удалить:', reply_markup=kb.topic_deleting_menu)
+
+@router.message(TopicState.deleting_title)
+@router.message(F.text.lower() == 'отменить удаление темы')
+async def deleting_topic_from_db(message: types.Message, state: FSMContext):
+
+    if message.text.lower() == 'отменить удаление темы':
+        await state.clear()
+        await message.answer('Вы отменили удаление темы', reply_markup=kb.topic_menu)
+    else:
+        await state.update_data(deleting_title=message.text)
+        data = await state.get_data()
+        title = data.get('deleting_title', 'ошибка')
+        await delete_words_by_topic_title(message.from_user.id, title=title)
+        flag = await delete_topics(message.from_user.id, title)
+        if flag:
+            
+            await message.answer(f'Вы удалили тему {title}', reply_markup=kb.topic_menu)
+            await state.clear()
+        else:
+            await message.answer(f'Тема {title} не найдена для удаления')
+
+
+@router.message(F.text.lower() == 'добавленные слова')
+async def title_list(message: types.Message, state: FSMContext):
+    await state.set_state(TopicState.title_list)
+    await message.answer('Введите название темы которую хотите посмотреть')
+
+
+
+@router.message(TopicState.title_list)
+async def choosing_topic(message: types.Message, state: FSMContext):
+    title = message.text
+    if title.lower() == 'назад':
+        await state.clear()
+        await message.answer('Вы успешно вернулись назад', reply_markup=kb.topic_menu)
+    else:
+        topic_id = await if_topic_exist(message.from_user.id, title)
+        print(topic_id[0])
+        if not topic_id[0] is None:
+            topics = await get_words_by_topic(topic_id=topic_id[0])
+            message_to_send = ''
+            for i in topics:
+                message_to_send += f'{i[0]} ---> {i[1]}\n'
+            await message.answer(message_to_send, reply_markup=kb.topic_menu)
+            await state.clear()
+        else:
+            await message.answer(f'Тема {title} не найдена для удаления')
+
+
+
+@router.message(F.text.lower() == 'добавить слова в тему')
+async def adding_topics(message: types.Message, state: FSMContext):
+    await state.set_state(TopicState.adding_topic)
+    await message.answer('Введите название <название темы>, куда будете добавлять слова', reply_markup=kb.word_adding_menu)
+
+@router.message(F.text.lower() == 'отменить добавление темы')
+async def remove_adding_words(message: types.Message, state: FSMContext):
+    await state.clear()
+    await message.answer('Отменение добавления слов успешно', reply_markup=kb.topic_menu)
+
+
+@router.message(TopicState.adding_topic)
+async def process_topic(message: types.Message, state: FSMContext):
+    topics = await get_topics_by_user(message.from_user.id)
+    topic_id = 0
+    flag = False
+    for i in topics:
+        if i[1] == message.text:
+            flag = True
+            topic_id = i[0]
+            break
+    if flag:
+        print(topics)
+        await state.update_data(adding_topic=topic_id)
+        await message.answer('Тема успешно добавлена, теперь введите слово или слова через megatranslate,', reply_markup=kb.word_adding_to_topic_menu)
+        await state.set_state(TopicState.adding_word)
+    else:
+        await message.answer('Тема не найдена. Попробуйте снова')
+            
+
+
+@router.message(F.text.lower() == 'прекратить добавление слов')
+async def remove_adding_words(message: types.Message, state: FSMContext):
+    await state.clear()
+    await message.answer('Отменение добавления слов успешно', reply_markup=kb.topic_menu)
+
+
+    
+@router.message(TopicState.adding_word)
+async def process_words(message: types.Message, state: FSMContext):
+    word = message.text
+    async with aiohttp.ClientSession() as session:
+        translated_word = await handle_text(session, word)
+    data = await state.get_data()
+    topic_id = data.get('adding_topic')
+    word_id = await add_word(topic_id=topic_id, word=word, translation=translated_word[1])
+    # Добавляем запись в learned_words
+    await add_learned_word(message.from_user.id, word_id)
+    await message.answer('успех')
+
+
+@router.message(F.text.lower() == 'моя статистика')
+async def my_statistic(message: types.Message):
+    user_id = message.from_user.id
+    topics = len(await get_topics_by_user(user_id=user_id))
+    words = await get_count_words_by_user(message.from_user.id)
+    await message.answer(f"Всего тем: {topics}, всего слов: {words}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@router.message(F.text.lower().strip() == 'мои темы')
+async def topic_list(message: types.Message):
+    topics = await get_topics_by_user(message.from_user.id)
+    answer = 'Вот список ваших тем:\n\n'
+    for i in range(len(topics)):
+        answer += f"{i+1}. {topics[i][1]}\n"
+    await message.answer(answer, reply_markup=kb.topic_menu)
+
+
 
 """
 Обработчик отвечающий за множественный перевод
